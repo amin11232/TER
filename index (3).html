@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>TERMINAL // AI CORE v3</title>
+
+  <!-- Внешние библиотеки для Markdown и подсветки кода -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script>window.marked || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"><\/script>')</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+
+    :root {
+      --bg: #050705;
+      --panel-bg: #080d08;
+      --green: #39ff6a;
+      --green-dim: #1f8a3f;
+      --green-faint: #123018;
+      --amber: #ffb300;
+      --red: #ff4d4d;
+      --cyan: #4dd0ff;
+      --text: #c9ffd6;
+      --border: #123018;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: var(--bg);
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text);
+      overscroll-behavior: none;
+    }
+
+    body {
+      display: flex;
+      height: 100dvh;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* CRT Эффекты */
+    body::before {
+      content: "";
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(57,255,106,0.03) 0px,
+        rgba(57,255,106,0.03) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      mix-blend-mode: overlay;
+      z-index: 50;
+    }
+
+    body::after {
+      content: "";
+      position: fixed; inset: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 100px rgba(0,0,0,0.85);
+      z-index: 51;
+    }
+
+    .term-window {
+      width: 100%;
+      height: 100dvh;
+      background: linear-gradient(180deg, #0a0f0a, #040604);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      z-index: 1;
+    }
+
+    .term-topbar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      border-bottom: 1px solid var(--border);
+      background: rgba(5, 7, 5, 0.8);
+    }
+    .term-topbar .dots { display: flex; gap: 7px; }
+    .term-topbar .dot { width: 10px; height: 10px; border-radius: 50%; opacity: .8; }
+    .term-topbar .dot.r { background: #ff5f56; }
+    .term-topbar .dot.y { background: #ffbd2e; }
+    .term-topbar .dot.g { background: #27c93f; }
+    .term-topbar .title { font-size: 11px; letter-spacing: 2px; color: var(--green-dim); text-transform: uppercase; }
+    .term-topbar .status { font-size: 10px; letter-spacing: 1px; padding: 2px 6px; border: 1px solid var(--green-dim); color: var(--green-dim); border-radius: 3px; }
+
+    /* Экран входа */
+    #loginBox { width: 100%; height: 100dvh; }
+    #loginBox .login-inner {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 20px; text-align: center;
+    }
+    #loginBox .lock-ascii {
+      color: var(--green-dim); font-size: 11px;
+      line-height: 1.3; margin-bottom: 18px; letter-spacing: 1px;
+    }
+    #loginBox .lead { color: var(--green-dim); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 22px; }
+
+    .shake { animation: shake 0.3s ease-in-out; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    input[type="password"] {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px; letter-spacing: 12px; text-align: center;
+      width: 180px; padding: 10px 10px 10px 20px;
+      border-radius: 4px; border: 1px solid var(--border);
+      background: #081008; color: var(--green); outline: none;
+    }
+    input[type="password"]:focus { border-color: var(--green-dim); box-shadow: 0 0 12px rgba(57,255,106,0.15); }
+
+    button {
+      font-family: 'JetBrains Mono', monospace;
+      display: block; margin: 18px auto 0; padding: 8px 20px;
+      font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+      border-radius: 4px; border: 1px solid var(--green-dim);
+      background: var(--green-faint); color: var(--green);
+      cursor: pointer; transition: all .15s ease;
+    }
+    button:hover { background: var(--green-dim); color: #04140a; }
+
+    #msg { margin-top: 14px; font-size: 12px; min-height: 16px; color: var(--red); letter-spacing: 1px; }
+
+    /* Контент чата */
+    #content { display: none; width: 100%; height: 100dvh; }
+
+    #apiKeySetup {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 30px 20px; text-align: center; overflow-y: auto;
+    }
+    #apiKeySetup p { font-size: 12.5px; color: var(--green-dim); line-height: 1.7; margin-bottom: 20px; max-width: 500px; }
+    #apiKeySetup a { color: var(--cyan); text-decoration: none; border-bottom: 1px dotted var(--cyan); }
+    #apiKeyInput {
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      width: 320px; max-width: 85vw; padding: 11px 13px;
+      border-radius: 4px; border: 1px solid var(--border);
+      background: #081008; color: var(--green); outline: none;
+    }
+
+    #chatWrap { display: none; flex-direction: column; flex: 1; min-height: 0; position: relative; }
+    #chatHeader {
+      flex: none; display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel-bg);
+      gap: 10px;
+    }
+    #chatHeader .hdr-btn-group { display: flex; gap: 8px; }
+    #chatHeader h2 { font-size: 11px; margin: 0; color: var(--green); letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    
+    .btn-small { display: inline-block; margin: 0; padding: 4px 8px; font-size: 10px; background: transparent; color: var(--green-dim); border: 1px solid var(--border); }
+    .btn-small:hover { border-color: var(--green-dim); color: var(--green); background: #0e1a0e; }
+
+    /* Панель истории чатов (Drawer) */
+    #historyDrawer {
+      position: absolute; top: 0; bottom: 0; left: 0; width: 280px; max-width: 80%;
+      background: rgba(6, 10, 6, 0.96); border-right: 1px solid var(--green-dim);
+      z-index: 20; display: flex; flex-direction: column;
+      transform: translateX(-100%); transition: transform 0.25s ease-in-out;
+      backdrop-filter: blur(4px);
+    }
+    #historyDrawer.open { transform: translateX(0); }
+    .drawer-header { padding: 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .drawer-header h3 { margin: 0; font-size: 11px; color: var(--green); letter-spacing: 1px; }
+    .drawer-content { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    
+    .session-item {
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
+      font-size: 11px; color: var(--green-dim); cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+      transition: all 0.15s ease;
+    }
+    .session-item:hover { border-color: var(--green-dim); color: var(--green); background: rgba(57,255,106,0.05); }
+    .session-item.active { border-color: var(--green); color: var(--green); background: var(--green-faint); font-weight: bold; }
+    .session-item .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 8px; }
+    .session-item .del-btn { color: var(--red); opacity: 0.6; font-size: 12px; padding: 0 4px; }
+    .session-item .del-btn:hover { opacity: 1; }
+
+    #drawerOverlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.5); z-index: 19;
+      display: none;
+    }
+    #drawerOverlay.open { display: block; }
+
+    /* Окно сообщений */
+    #chatMessages {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 14px;
+      scrollbar-width: thin; scrollbar-color: var(--green-dim) transparent;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .chat-msg { max-width: 90%; font-size: 13px; line-height: 1.6; word-break: break-word; }
+    .chat-msg .prompt { font-weight: 700; margin-right: 6px; float: left; user-select: none; }
+    .chat-msg.user { align-self: flex-end; text-align: right; }
+    .chat-msg.user .prompt { color: var(--cyan); float: right; margin-left: 6px; margin-right: 0; }
+    .chat-msg.user .txt { color: var(--text); background: rgba(18, 48, 24, 0.4); padding: 8px 12px; border-radius: 6px; display: inline-block; text-align: left; }
+    
+    .chat-msg.model { align-self: flex-start; width: 100%; }
+    .chat-msg.model .prompt { color: var(--green); }
+    .chat-msg.model .txt { color: var(--text); overflow-x: auto; }
+
+    .chat-msg.system-msg .txt { color: var(--amber); font-style: italic; }
+    
+    /* Markdown */
+    .txt p { margin: 0 0 8px 0; }
+    .txt p:last-child { margin-bottom: 0; }
+    .txt ul, .txt ol { margin: 4px 0 8px 20px; padding: 0; }
+    .txt code { font-family: 'JetBrains Mono', monospace; background: #101c10; color: var(--cyan); padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+    .txt pre { background: #030503 !important; padding: 10px; border-radius: 4px; border: 1px solid var(--border); overflow-x: auto; margin: 8px 0; }
+    .txt pre code { background: transparent; padding: 0; color: inherit; }
+
+    .blink { animation: blink 1s step-start infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    #chatInputRow {
+      flex: none; display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; padding-bottom: max(10px, env(safe-area-inset-bottom));
+      border-top: 1px solid var(--border); background: var(--panel-bg);
+    }
+    #chatInputRow .arrow { color: var(--green); font-weight: 700; font-size: 14px; align-self: flex-end; padding-bottom: 8px; }
+    #chatInput {
+      flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+      padding: 6px 0; border: none; background: transparent; resize: none;
+      color: var(--green); outline: none; caret-color: var(--green);
+      max-height: 120px; line-height: 1.4;
+    }
+    #chatInput::placeholder { color: var(--green-faint); }
+    #chatSendBtn { margin: 0; padding: 8px 16px; font-size: 10px; align-self: flex-end; }
+    #chatStopBtn { margin: 0; padding: 8px 14px; font-size: 10px; align-self: flex-end; border-color: var(--red); color: var(--red); background: rgba(255,77,77,0.08); }
+    #chatStopBtn:hover { background: var(--red); color: #1a0505; }
+    #chatMsgErr { color: var(--red); font-size: 11px; padding: 0 16px 8px; min-height: 14px; letter-spacing: .5px; }
+
+    #modelSelect {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .5px;
+      padding: 4px 6px; background: transparent; color: var(--green-dim);
+      border: 1px solid var(--border); border-radius: 3px; cursor: pointer; outline: none;
+      text-transform: uppercase;
+    }
+    #modelSelect:hover { border-color: var(--green-dim); color: var(--green); }
+    #modelSelect option { background: #060a06; color: var(--green); }
+
+    .chat-msg.model .copy-btn {
+      display: inline-block; margin-top: 6px; font-size: 10px; letter-spacing: .5px;
+      color: var(--green-dim); border: 1px solid var(--border); border-radius: 3px;
+      padding: 2px 7px; cursor: pointer; background: transparent; user-select: none;
+    }
+    .chat-msg.model .copy-btn:hover { color: var(--green); border-color: var(--green-dim); }
+    .chat-msg.model .copy-btn.copied { color: var(--cyan); border-color: var(--cyan); }
+
+    @media (max-width: 480px) {
+      input[type="password"] { width: 140px; font-size: 20px; }
+      .chat-msg { max-width: 95%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Экран блокировки -->
+  <div class="box" id="loginBox">
+    <div class="term-window">
+      <div class="term-topbar">
+        <div class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <div class="title">TERMINAL // SECURITY GATE</div>
+        <div class="status">🔒 LOCKED</div>
+      </div>
+      <div class="login-inner" id="loginInner">
+        <div class="lock-ascii">┌──────────────┐<br>│&nbsp;&nbsp;RESTRICTED&nbsp;&nbsp;│<br>└──────────────┘</div>
+        <div class="lead">ВВЕДИТЕ КОД ДОСТУПА<span class="blink">_</span></div>
+        <input type="password" id="pwInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" autofocus autocomplete="off">
+        <button id="okBtn">Разблокировать</button>
+        <div id="msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Главный экран чата -->
+  <div id="content">
+    <div class="term-window">
+      <div class="term-topbar">
+        <div class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <div class="title">AI CORE // TERMINAL v3.0</div>
+        <div class="status" id="connStatus">● READY</div>
+      </div>
+
+      <!-- Настройка API-ключа -->
+      <div id="apiKeySetup">
+        <p>&gt; Требуется API-ключ Gemini.<br>
+        &gt; Бесплатный ключ доступен на <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.<br>
+        &gt; Ключ сохраняется локально в вашем браузере.</p>
+        <input type="password" id="apiKeyInput" placeholder="Вставьте API ключ..." autocomplete="off">
+        <button id="saveKeyBtn">Активировать</button>
+      </div>
+
+      <!-- Интерфейс чата -->
+      <div id="chatWrap">
+        
+        <!-- Выдвижная панель истории сессий -->
+        <div id="drawerOverlay"></div>
+        <div id="historyDrawer">
+          <div class="drawer-header">
+            <h3>[ ИСТОРИЯ СЕССИЙ ]</h3>
+            <button class="btn-small" id="closeDrawerBtn">✕</button>
+          </div>
+          <button id="newSessionBtnDrawer" style="width: calc(100% - 20px); margin: 10px auto 4px;">+ НОВАЯ СЕССИЯ</button>
+          <div class="drawer-content" id="sessionList"></div>
+        </div>
+
+        <div id="chatHeader">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <button class="btn-small" id="toggleDrawerBtn">📜 ИСТОРИЯ</button>
+            <h2 id="sessionTitleDisplay">&gt; session_active</h2>
+          </div>
+          <div class="hdr-btn-group">
+            <select class="btn-small" id="modelSelect" title="Выбор модели">
+              <option value="gemini-3.8-flash">flash</option>
+              <option value="gemini-3.1-pro-preview">pro</option>
+              <option value="gemini-3.5-flash-lite">flash-lite</option>
+            </select>
+            <button class="btn-small" id="changeKeyBtn">ключ</button>
+          </div>
+        </div>
+
+        <div id="chatMessages"></div>
+
+        <div id="chatInputRow">
+          <span class="arrow">&gt;</span>
+          <textarea id="chatInput" rows="1" placeholder="Введите сообщение или /help... (Shift+Enter — новая строка)" autocomplete="off"></textarea>
+          <button id="chatStopBtn" style="display:none;">STOP</button>
+          <button id="chatSendBtn">SEND</button>
+        </div>
+        <div id="chatMsgErr"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Библиотеки с CDN могут не загрузиться — скрипт не должен из-за этого умирать
+    try { if (window.marked && marked.setOptions) marked.setOptions({ breaks: true }); } catch (e) {}
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function mdToHtml(text) {
+      let html;
+      try {
+        html = window.marked.parse ? window.marked.parse(text) : window.marked(text);
+      } catch (e) { html = null; }
+      if (typeof html !== 'string') html = escapeHtml(text).replace(/\n/g, '<br>');
+      try { if (window.DOMPurify) html = DOMPurify.sanitize(html); } catch (e) {}
+      return html;
+    }
+
+    function highlightIn(el) {
+      if (!window.hljs) return;
+      el.querySelectorAll('pre code').forEach(b => { try { hljs.highlightElement(b); } catch (e) {} });
+    }
+
+    function renderInto(el, text, cursor = false) {
+      el.innerHTML = mdToHtml(text) + (cursor ? '<span class="blink">▍</span>' : '');
+      if (!cursor) highlightIn(el);
+    }
+
+    // ============ АУТЕНТИФИКАЦИЯ ============
+    const CORRECT_HASH = "489ca219174f91b48313c188f4c998a5413fcaf194a93fd8e24bbdb178dc8f3a";
+
+    async function sha256Hex(text) {
+      const data = new TextEncoder().encode(text);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    const pwInput = document.getElementById('pwInput');
+    const okBtn = document.getElementById('okBtn');
+    const msg = document.getElementById('msg');
+    const loginInner = document.getElementById('loginInner');
+
+    pwInput.addEventListener('input', () => {
+      pwInput.value = pwInput.value.replace(/\D/g, '').slice(0, 4);
+      if (pwInput.value.length === 4) checkPassword();
+    });
+
+    pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') checkPassword(); });
+    okBtn.addEventListener('click', checkPassword);
+
+    async function checkPassword() {
+      const val = pwInput.value;
+      if (val.length !== 4) {
+        msg.textContent = '> введите 4-значный код';
+        return;
+      }
+      const hash = await sha256Hex(val);
+      if (hash === CORRECT_HASH) {
+        msg.textContent = '';
+        document.getElementById('loginBox').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        showChatIfKeySaved();
+      } else {
+        msg.textContent = 'ОШИБКА: отказ в доступе';
+        pwInput.value = '';
+        loginInner.classList.add('shake');
+        setTimeout(() => loginInner.classList.remove('shake'), 400);
+        pwInput.focus();
+      }
+    }
+
+    // ============ МЕНЕДЖЕР СЕССИЙ И ЧАТА ============
+    const MODEL_STORAGE = 'gemini_model_choice_v1';
+    const MODEL_MAP = { flash: 'gemini-3.8-flash', pro: 'gemini-3.1-pro-preview', lite: 'gemini-3.5-flash-lite' };
+    const DEFAULT_MODEL = MODEL_MAP.flash;
+    // Если выбранная модель вернёт 404 — пробуем эти по очереди
+    const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+    // Старые сохранённые значения (алиасы -latest) переводим на явные ID
+    const LEGACY_MODELS = {
+      'gemini-flash-latest': MODEL_MAP.flash,
+      'gemini-pro-latest': MODEL_MAP.pro,
+      'gemini-flash-lite-latest': MODEL_MAP.lite
+    };
+    const resolvedModel = {}; // выбранная -> { model, until } (until = Infinity для 404, иначе временный обход перегрузки)
+    const OVERLOAD_BYPASS_MS = 2 * 60 * 1000;
+    function getResolved(selected) {
+      const r = resolvedModel[selected];
+      if (!r) return selected;
+      if (Date.now() > r.until) { delete resolvedModel[selected]; return selected; }
+      return r.model;
+    }
+    const GEMINI_KEY_STORAGE = 'gemini_api_key_v2';
+    const SESSIONS_STORAGE = 'gemini_chat_sessions_list_v1';
+
+    const apiKeySetup = document.getElementById('apiKeySetup');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const saveKeyBtn = document.getElementById('saveKeyBtn');
+    const chatWrap = document.getElementById('chatWrap');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const chatStopBtn = document.getElementById('chatStopBtn');
+    const chatMsgErr = document.getElementById('chatMsgErr');
+    const changeKeyBtn = document.getElementById('changeKeyBtn');
+    const connStatus = document.getElementById('connStatus');
+    const modelSelect = document.getElementById('modelSelect');
+
+    (function initModel() {
+      let saved = localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL;
+      if (LEGACY_MODELS[saved]) saved = LEGACY_MODELS[saved];
+      modelSelect.value = saved;
+      if (modelSelect.value !== saved) modelSelect.value = DEFAULT_MODEL;
+      localStorage.setItem(MODEL_STORAGE, modelSelect.value);
+    })();
+    modelSelect.addEventListener('change', () => {
+      localStorage.setItem(MODEL_STORAGE, modelSelect.value);
+    });
+
+    // Элементы Drawer (История)
+    const historyDrawer = document.getElementById('historyDrawer');
+    const drawerOverlay = document.getElementById('drawerOverlay');
+    const toggleDrawerBtn = document.getElementById('toggleDrawerBtn');
+    const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+    const newSessionBtnDrawer = document.getElementById('newSessionBtnDrawer');
+    const sessionList = document.getElementById('sessionList');
+    const sessionTitleDisplay = document.getElementById('sessionTitleDisplay');
+
+    let sessions = []; // Хранилище всех сессий
+    let currentSessionId = null;
+    let systemInstruction = "You are a retro-futuristic hacker terminal AI assistant. Respond informatively, concisely, and use markdown where appropriate.";
+
+    function showChatIfKeySaved() {
+      const key = localStorage.getItem(GEMINI_KEY_STORAGE);
+      if (key) {
+        apiKeySetup.style.display = 'none';
+        chatWrap.style.display = 'flex';
+        initSessions();
+        chatInput.focus();
+      } else {
+        apiKeySetup.style.display = 'flex';
+        chatWrap.style.display = 'none';
+      }
+    }
+
+    // --- Управление Сессиями (История) ---
+    function initSessions() {
+      const saved = localStorage.getItem(SESSIONS_STORAGE);
+      if (saved) {
+        try { sessions = JSON.parse(saved); } catch (e) { sessions = []; }
+      }
+      if (!sessions || sessions.length === 0) {
+        createNewSession();
+      } else {
+        switchSession(sessions[0].id);
+      }
+      renderSessionList();
+    }
+
+    function saveSessions() {
+      localStorage.setItem(SESSIONS_STORAGE, JSON.stringify(sessions));
+      renderSessionList();
+    }
+
+    function createNewSession() {
+      const newId = 'sess_' + Date.now();
+      const newSess = {
+        id: newId,
+        title: 'Новая сессия',
+        history: []
+      };
+      sessions.unshift(newSess);
+      saveSessions();
+      switchSession(newId);
+      closeDrawer();
+    }
+
+    function switchSession(id) {
+      currentSessionId = id;
+      const sess = sessions.find(s => s.id === id);
+      if (!sess) return;
+
+      sessionTitleDisplay.textContent = `> ${sess.title}`;
+      chatMessages.innerHTML = '';
+
+      if (sess.history.length === 0) {
+        addMessage('model', 'Терминал готов. Введите сообщение или `/help`');
+      } else {
+        sess.history.forEach(item => {
+          const role = item.role === 'user' ? 'user' : 'model';
+          const { txt } = addMessage(role, item.parts[0].text);
+          if (role === 'model') txt.dataset.raw = item.parts[0].text;
+        });
+      }
+      renderSessionList();
+    }
+
+    function deleteSession(id, e) {
+      if (e) e.stopPropagation();
+      if (sessions.length <= 1) {
+        // Если осталась одна сессия, просто очищаем её
+        sessions[0].history = [];
+        sessions[0].title = 'Новая сессия';
+        saveSessions();
+        switchSession(sessions[0].id);
+        return;
+      }
+
+      sessions = sessions.filter(s => s.id !== id);
+      saveSessions();
+
+      if (currentSessionId === id) {
+        switchSession(sessions[0].id);
+      }
+    }
+
+    function renderSessionList() {
+      sessionList.innerHTML = '';
+      sessions.forEach(sess => {
+        const item = document.createElement('div');
+        item.className = `session-item ${sess.id === currentSessionId ? 'active' : ''}`;
+        
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'title-text';
+        titleSpan.textContent = sess.title;
+
+        const delBtn = document.createElement('span');
+        delBtn.className = 'del-btn';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Удалить чат';
+        delBtn.onclick = (e) => deleteSession(sess.id, e);
+
+        item.appendChild(titleSpan);
+        item.appendChild(delBtn);
+        item.onclick = () => { switchSession(sess.id); closeDrawer(); };
+
+        sessionList.appendChild(item);
+      });
+    }
+
+    function updateSessionTitle(sess, firstMsgText) {
+      if (sess.title === 'Новая сессия' && firstMsgText) {
+        sess.title = firstMsgText.slice(0, 22) + (firstMsgText.length > 22 ? '...' : '');
+        sessionTitleDisplay.textContent = `> ${sess.title}`;
+        saveSessions();
+      }
+    }
+
+    // Drawer утилиты
+    function openDrawer() { historyDrawer.classList.add('open'); drawerOverlay.classList.add('open'); }
+    function closeDrawer() { historyDrawer.classList.remove('open'); drawerOverlay.classList.remove('open'); }
+    
+    toggleDrawerBtn.addEventListener('click', openDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+    drawerOverlay.addEventListener('click', closeDrawer);
+    newSessionBtnDrawer.addEventListener('click', createNewSession);
+
+    // API Key события
+    saveKeyBtn.addEventListener('click', () => {
+      const key = apiKeyInput.value.trim();
+      if (!key) return;
+      localStorage.setItem(GEMINI_KEY_STORAGE, key);
+      apiKeyInput.value = '';
+      showChatIfKeySaved();
+    });
+
+    apiKeyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveKeyBtn.click(); });
+
+    changeKeyBtn.addEventListener('click', () => {
+      localStorage.removeItem(GEMINI_KEY_STORAGE);
+      showChatIfKeySaved();
+    });
+
+    // Хелпер создания элементов сообщений
+    function addMessage(role, text, isSystem = false) {
+      const wrap = document.createElement('div');
+      wrap.className = `chat-msg ${role} ${isSystem ? 'system-msg' : ''}`;
+      
+      const prompt = document.createElement('span');
+      prompt.className = 'prompt';
+      prompt.textContent = role === 'user' ? '>' : (isSystem ? '!' : '#');
+      
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      
+      if (role === 'model' && !isSystem) {
+        renderInto(txt, text);
+      } else {
+        txt.textContent = text;
+      }
+
+      wrap.appendChild(prompt);
+      wrap.appendChild(txt);
+
+      if (role === 'model' && !isSystem) {
+        const copyBtn = document.createElement('span');
+        copyBtn.className = 'copy-btn';
+        copyBtn.textContent = 'копировать';
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(txt.dataset.raw || txt.textContent).then(() => {
+            copyBtn.textContent = 'скопировано ✓';
+            copyBtn.classList.add('copied');
+            setTimeout(() => { copyBtn.textContent = 'копировать'; copyBtn.classList.remove('copied'); }, 1500);
+          });
+        };
+        wrap.appendChild(document.createElement('br'));
+        wrap.appendChild(copyBtn);
+      }
+
+      chatMessages.appendChild(wrap);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return { wrap, txt };
+    }
+
+    function setConn(state) {
+      const states = {
+        ready: { text: '● READY', color: 'var(--green-dim)' },
+        busy: { text: '● STREAMING...', color: 'var(--amber)' },
+        retry: { text: '↻ RETRYING...', color: 'var(--amber)' },
+        error: { text: '✕ ERROR', color: 'var(--red)' }
+      };
+      const current = states[state] || states.ready;
+      connStatus.textContent = current.text;
+      connStatus.style.color = current.color;
+      connStatus.style.borderColor = current.color;
+    }
+
+    // CLI Команды
+    function handleCLICommands(text) {
+      const lower = text.toLowerCase().trim();
+      if (lower === '/clear') {
+        const sess = sessions.find(s => s.id === currentSessionId);
+        if (sess) sess.history = [];
+        saveSessions();
+        chatMessages.innerHTML = '';
+        addMessage('model', 'История сессии очищена.', true);
+        return true;
+      }
+      if (lower === '/new') {
+        createNewSession();
+        return true;
+      }
+      if (lower === '/chats') {
+        openDrawer();
+        return true;
+      }
+      if (lower === '/help') {
+        const helpText = `**Список CLI команд:**
+- \`/new\` : Создать новую сессию
+- \`/chats\` : Открыть историю чатов
+- \`/clear\` : Очистить контекст сессии
+- \`/key\` : Сменить API ключ
+- \`/model <flash|pro|lite>\` : Сменить модель (текущая: ${modelSelect.value})
+- \`/system <текст>\` : Сменить роль ИИ`;
+        addMessage('model', helpText);
+        return true;
+      }
+      if (lower === '/key') {
+        changeKeyBtn.click();
+        return true;
+      }
+      if (lower.startsWith('/model')) {
+        const arg = lower.replace('/model', '').trim();
+        const map = MODEL_MAP;
+        if (map[arg]) {
+          modelSelect.value = map[arg];
+          localStorage.setItem(MODEL_STORAGE, modelSelect.value);
+          addMessage('model', `Модель переключена на: ${modelSelect.value}`, true);
+        } else {
+          addMessage('model', `Текущая модель: ${modelSelect.value}. Использование: /model flash|pro|lite`, true);
+        }
+        return true;
+      }
+      if (lower.startsWith('/system ')) {
+        systemInstruction = text.replace('/system ', '').trim();
+        addMessage('model', `Системный промпт обновлен: "${systemInstruction}"`, true);
+        return true;
+      }
+      return false;
+    }
+
+    // Автоувеличение textarea по высоте
+    function autoResizeInput() {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+    }
+    chatInput.addEventListener('input', autoResizeInput);
+
+    let activeAbortController = null;
+
+    function setGenerating(isGenerating) {
+      chatSendBtn.style.display = isGenerating ? 'none' : 'block';
+      chatStopBtn.style.display = isGenerating ? 'block' : 'none';
+    }
+
+    // Читает SSE-поток одной модели. Бросает Error с полем status при HTTP-ошибке.
+    async function streamFromModel(model, payload, signal, onText) {
+      const key = localStorage.getItem(GEMINI_KEY_STORAGE);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const e = new Error(errData.error?.message || `HTTP ${response.status}`);
+        e.status = response.status;
+        throw e;
+      }
+
+      let text = '';
+      let finishReason = null;
+      let blockReason = null;
+
+      const handleLine = (rawLine) => {
+        const line = rawLine.trim();
+        if (!line.startsWith('data:')) return;
+        const jsonStr = line.slice(5).trim();
+        if (!jsonStr || jsonStr === '[DONE]') return;
+
+        let data;
+        try { data = JSON.parse(jsonStr); } catch (e) { return; }
+
+        if (data.error) {
+          const e = new Error(data.error.message || 'API error');
+          e.status = data.error.code;
+          throw e;
+        }
+        if (data.promptFeedback?.blockReason) blockReason = data.promptFeedback.blockReason;
+
+        const cand = data.candidates?.[0];
+        if (cand?.finishReason) finishReason = cand.finishReason;
+
+        // Берём текст из ВСЕХ частей, пропуская «мысли» модели
+        let chunk = '';
+        for (const p of (cand?.content?.parts || [])) {
+          if (typeof p.text === 'string' && !p.thought) chunk += p.text;
+        }
+        if (chunk) { text += chunk; onText(text); }
+      };
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        lines.forEach(handleLine);
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) handleLine(buffer); // последний кусок без перевода строки
+
+      return { text, finishReason, blockReason };
+    }
+
+    function isOverloaded(err) {
+      const msg = (err && err.message) || '';
+      return [500, 502, 503, 504].includes(err && err.status) || /high demand|overloaded|unavailable/i.test(msg);
+    }
+    // Кратковременный сбой сети (обрыв соединения до начала ответа)
+    function isNetworkGlitch(err) {
+      return err && err.name === 'TypeError' && !err.status;
+    }
+    function isTransient(err) { return isOverloaded(err) || isNetworkGlitch(err); }
+    function sleep(ms, signal) {
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(resolve, ms);
+        if (signal) signal.addEventListener('abort', () => {
+          clearTimeout(t);
+          const e = new Error('Aborted'); e.name = 'AbortError'; reject(e);
+        }, { once: true });
+      });
+    }
+
+    function explainError(err) {
+      const msg = err.message || String(err);
+      if (err.status === 400 && /api key/i.test(msg)) return `${msg} — введите /key и вставьте корректный ключ.`;
+      if (err.status === 403) return `${msg} — проверьте ключ (/key) и доступ к API.`;
+      if (err.status === 404) return `${msg} — модель недоступна, выберите другую в списке сверху.`;
+      if (isOverloaded(err)) return 'Все модели сейчас перегружены (высокий спрос у Google). Это временно — попробуйте через минуту или выберите другую модель.';
+      if (err.status === 429) return `${msg} — исчерпан лимит запросов. Подождите или выберите модель flash (pro может быть недоступна на бесплатном тарифе).`;
+      if (msg === 'Failed to fetch' || err.name === 'TypeError') return 'Нет связи с Gemini API (сеть, VPN или блокировщик).';
+      return msg;
+    }
+
+    // Отправка запросов Gemini API
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      if (activeAbortController) return; // уже идёт генерация
+
+      chatMsgErr.textContent = '';
+      chatInput.value = '';
+      autoResizeInput();
+
+      if (handleCLICommands(text)) return;
+
+      const currentSess = sessions.find(s => s.id === currentSessionId);
+      if (!currentSess) return;
+
+      const { wrap: userWrap } = addMessage('user', text);
+      currentSess.history.push({ role: 'user', parts: [{ text }] });
+      updateSessionTitle(currentSess, text);
+      saveSessions();
+
+      const { wrap: modelWrap, txt: modelTxtEl } = addMessage('model', '');
+      modelTxtEl.innerHTML = '<span class="blink">▍</span>';
+      setConn('busy');
+      setGenerating(true);
+
+      const selectedModel = modelSelect.value || DEFAULT_MODEL;
+      const first = getResolved(selectedModel);
+      const chain = [first, ...FALLBACK_MODELS.filter(m => m !== first)];
+
+      // В запрос уходят только непустые реплики
+      const contents = currentSess.history.filter(h => h.parts?.[0]?.text);
+      const payload = {
+        contents,
+        systemInstruction: { parts: [{ text: systemInstruction }] }
+      };
+
+      let partial = '';
+      activeAbortController = new AbortController();
+      const signal = activeAbortController.signal;
+
+      // Откатывает неудачную отправку: убирает пузыри, возвращает текст в поле ввода
+      const rollback = () => {
+        modelWrap.remove();
+        userWrap.remove();
+        currentSess.history.pop();
+        saveSessions();
+        chatInput.value = text;
+        autoResizeInput();
+      };
+
+      try {
+        let result = null;
+        let lastErr = null;
+        let lastFailWas404 = false;
+
+        for (const model of chain) {
+          // До 3 попыток на модель при перегрузке (503/500/504) с нарастающей паузой
+          let modelDone = false;
+          for (let attempt = 0; attempt < 3 && !modelDone; attempt++) {
+            try {
+              result = await streamFromModel(model, payload, signal, (t) => {
+                partial = t;
+                renderInto(modelTxtEl, t, true);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              });
+              modelDone = true;
+            } catch (err) {
+              if (err.name === 'AbortError') throw err;
+              lastErr = err;
+              if (partial) throw err; // уже начали выводить ответ — не повторяем
+              if (isTransient(err) && attempt < 2) {
+                const why = isOverloaded(err) ? 'сервер перегружен' : 'сбой сети';
+                const delay = 1500 * Math.pow(2, attempt) + Math.random() * 500; // ~1.5с, ~3с + джиттер
+                modelTxtEl.innerHTML = `<span class="blink">▍</span> <em style="color:var(--amber);">${why}, повтор ${attempt + 1}/2 (${model})…</em>`;
+                setConn('retry');
+                await sleep(delay, signal);
+                setConn('busy');
+                continue;
+              }
+              break; // переходим к следующей модели
+            }
+          }
+          if (modelDone) {
+            if (model !== selectedModel) {
+              // 404 запоминаем надолго, перегрузку — только на пару минут, чтобы вернуться на основную модель
+              resolvedModel[selectedModel] = { model, until: lastFailWas404 ? Infinity : Date.now() + OVERLOAD_BYPASS_MS };
+              addMessage('model', `Модель ${selectedModel} недоступна/перегружена, использована ${model}.`, true);
+            }
+            break;
+          }
+          // Не вышло: пробуем следующую модель при 404, 429 или перегрузке, иначе — ошибка
+          if (!(lastErr.status === 404 || lastErr.status === 429 || isTransient(lastErr))) throw lastErr;
+          lastFailWas404 = lastErr.status === 404;
+          modelTxtEl.innerHTML = '<span class="blink">▍</span> <em style="color:var(--amber);">переключаюсь на другую модель…</em>';
+        }
+        if (!result) throw lastErr || new Error('Не удалось получить ответ');
+
+        if (!result.text) {
+          let reason = 'Модель вернула пустой ответ';
+          if (result.blockReason) reason = `Запрос заблокирован фильтрами (${result.blockReason})`;
+          else if (result.finishReason && result.finishReason !== 'STOP') reason = `Пустой ответ (${result.finishReason})`;
+          throw new Error(reason);
+        }
+
+        renderInto(modelTxtEl, result.text);
+        modelTxtEl.dataset.raw = result.text;
+        currentSess.history.push({ role: 'model', parts: [{ text: result.text }] });
+        saveSessions();
+        setConn('ready');
+
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          if (partial) {
+            renderInto(modelTxtEl, partial);
+            modelTxtEl.insertAdjacentHTML('beforeend', ' <em style="color:var(--amber);">[остановлено]</em>');
+            modelTxtEl.dataset.raw = partial;
+            currentSess.history.push({ role: 'model', parts: [{ text: partial }] });
+            saveSessions();
+          } else {
+            rollback();
+          }
+          setConn('ready');
+        } else {
+          rollback();
+          setConn('error');
+          const explained = explainError(err);
+          addMessage('model', `Ошибка: ${explained}`, true);
+        }
+      } finally {
+        activeAbortController = null;
+        setGenerating(false);
+      }
+    }
+
+    chatSendBtn.addEventListener('click', sendMessage);
+    chatStopBtn.addEventListener('click', () => {
+      if (activeAbortController) activeAbortController.abort();
+    });
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>
